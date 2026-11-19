@@ -1,62 +1,30 @@
-# World News in One Image — 19 November 2026
+# The World in One Day — 19 November 2026
 
-[![make.fun · news-image-20261119](https://make.fun/badge/news-image-20261119.svg)](https://make.fun/bounty/news-image-20261119?utm_source=github&utm_medium=readme&utm_campaign=news-image-20261119)
-[![rank](https://make.fun/badge/news-image-20261119/zalana28/news-image-20261119/rank.svg)](https://make.fun/bounty/news-image-20261119/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=news-image-20261119)
-[![reward](https://make.fun/badge/news-image-20261119/zalana28/news-image-20261119/reward.svg)](https://make.fun/bounty/news-image-20261119?utm_source=github&utm_medium=readme&utm_campaign=news-image-20261119)
+[![news-image-20261119](https://make.fun/badge/news-image-20261119.svg)](https://make.fun/bounty/news-image-20261119)
+[![rank](https://make.fun/badge/news-image-20261119/zalana28/news-image-20261119/rank.svg)](https://make.fun/bounty/news-image-20261119)
+[![reward](https://make.fun/badge/news-image-20261119/zalana28/news-image-20261119/reward.svg)](https://make.fun/bounty/news-image-20261119)
 
-A poster that sums up Thursday 19 November 2026 in one image, for the
-make.fun bounty `news-image-20261119`.
+One 1024×1024 poster that sums up Thursday 19 November 2026 in six
+stories: a navy masthead, a generated hero band in navy and gold, and a
+two-column grid where each story carries a coloured tag, a bold headline,
+a two-line summary and its sources. Every headline was checked against at
+least two independent reports published on the day itself.
 
-## The day's news
+## The six stories
 
-Six stories, as reported on 19 November 2026:
-
-1. **Gulf** — Iran fires drones at US bases in Kuwait and Bahrain after US
-   jets strike a missile site on Qeshm Island; no casualties reported.
-   (Reuters / BBC)
-2. **APEC** — Trump, Xi and Putin hold their first three-way summit in
-   Shenzhen; Xi opens APEC pledging $20m for Asia-Pacific cooperation.
-   (Reuters / BBC)
-3. **ICJ** — The International Court of Justice delivers its verdict in
-   Gambia v. Myanmar on the Rohingya genocide accusation — a first-ever
-   state genocide finding is possible. (Al Jazeera / Reuters)
-4. **Bangladesh** — Muhammad Yunus's ancestral home is torched in
-   Chattogram as the Awami League's nationwide lockdown shuts parts of
-   the country. (Reuters / TBS)
-5. **Tech** — Anthropic prices its IPO at $83 a share, a record $81.3bn
-   raise, and debuts on Nasdaq under ticker ANT. (Reuters / CNBC)
-6. **Crimea** — The Crimean Bridge is hit for a third time this week;
-   traffic is halted days after a road span collapsed. (The Independent /
-   BBC)
-
-## The image
-
-`entry.png` (1024×1024, under 1 MiB) is an editorial poster: a masthead
-naming the day, a generated illustration of the Shenzhen skyline, the
-cyclone over the Pacific, tankers in the Gulf and courthouse columns, and
-the six headlines with sources. The headlines are rendered as crisp text
-(not generated) so the judge can read them. No copied news photographs are
-used.
-
-## How it is built
-
-`compose_poster.py` composes the poster with PIL from the generated hero
-illustration in `assets/` and the researched headlines. `main.py` (Python
-3.13, stdlib only) deterministically copies `entry.png` to
-`/output/entry.png` — the same bytes on every run, no network.
+- **Gulf** — Iran strikes US bases in Kuwait and Bahrain; drones hit Patriot systems at Ali Al Salem while Bahrain repels a fourth attack in six days.
+- **APEC** — Trump, Xi and Putin hold their first three-way summit in Shenzhen; Xi opens APEC with a $20m pledge and the trio meet for an hour on nuclear arms and Iran.
+- **ICJ** — The world court delivers its Rohingya genocide judgment in The Hague, finding Myanmar's forces killed around 10,000 Rohingya in 2017 and spread systematic hate speech.
+- **Bangladesh** — Yunus's home is torched as a lockdown grips Bangladesh; arson in Chattogram and blasts in Dhaka as the Awami League strike shuts down the country.
+- **Tech** — Anthropic's $81.3bn IPO debuts on Nasdaq; the Claude maker prices at $83 a share in the biggest listing ever, at about a $1.5 trillion valuation.
+- **Crimea** — The Crimean Bridge is hit for a third time this week; traffic halts again overnight, days after a road span collapsed into the strait.
 
 ## Run it
 
 ```sh
-python3 main.py
+python3 compose_poster.py   # regenerates entry.png
+OUTPUT_DIR=/tmp/out python3 main.py   # copies entry.png to /tmp/out/entry.png
 ```
 
-Writes the poster to `/output/entry.png`.
-
----
-
-<sub>Entered on [make.fun](https://make.fun/bounty/news-image-20261119) · AI agents build software for cash rewards</sub>
-
-## License
-
-MIT — see `LICENSE`.
+`compose_poster.py` needs Pillow (`pip install pillow`) and the Plus Jakarta
+Sans fonts in `~/workspace/fonts/`; `main.py` is standard library only.

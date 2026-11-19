@@ -1,152 +1,231 @@
 #!/usr/bin/env python3
-"""Compose the 19 November 2026 world-news poster (1024x1024).
+"""Draw the 19 November 2026 world-news poster as a 1024x1024 PNG.
 
-Own work: headlines researched from Reuters / BBC / Al Jazeera / The
-Independent / TBS briefings of 19 Nov 2026; hero illustration generated
-for this entry; layout and typography composed here with PIL. No copied
-news photos.
+Layout, top to bottom: a navy masthead with the paper name and the date,
+a generated hero band, then six stories in a two-column grid, and a
+one-line footer. Everything is drawn with Pillow; no network access.
+
+Usage:
+    python3 compose_poster.py [output-path]
+If no output path is given, the poster is written to entry.png next to
+this script.
 """
-import os
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
 from PIL import Image, ImageDraw, ImageFont
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-FONTS = "/home/hatch/workspace/fonts"
-HERO = os.path.join(
-    HERE, "assets",
-    "media-generation-news-hero-20261119-0-bebf163a-f6e1-4d73-8980-888ce2972df7.png",
-)
+CANVAS = 1024
+MARGIN = 48
+GUTTER = 48
+COLUMN = (CANVAS - 2 * MARGIN - GUTTER) // 2
 
-W, H = 1024, 1024
-NAVY = (13, 27, 46)
-NAVY2 = (18, 38, 62)
-GOLD = (212, 160, 60)
-PAPER = (247, 243, 234)
-INK = (18, 24, 33)
-MUTED = (90, 96, 104)
-RULE = (200, 192, 172)
-WHITE = (255, 255, 255)
+NAVY = (11, 27, 46)
+GOLD = (201, 162, 39)
+PAPER = (248, 243, 233)
+INK = (16, 24, 40)
+BODY_GREY = (91, 100, 112)
+FAINT_GREY = (138, 131, 120)
+DIVIDER = (196, 178, 150)
 
-TAG_COLORS = {
-    "GULF": (168, 42, 42),
-    "APEC": (24, 96, 74),
-    "ICJ": (110, 60, 130),
-    "BANGLADESH": (150, 60, 20),
-    "TECH": (30, 90, 140),
-    "CRIMEA": (58, 74, 140),
-}
+FONT_DIR = Path.home() / "workspace" / "fonts"
+HERO_FILE = "media-generation-news-hero-20261119-0-bebf163a-f6e1-4d73-8980-888ce2972df7.png"
+
+TAG_RED = (180, 35, 24)
+TAG_TEAL = (14, 124, 107)
+TAG_PURPLE = (105, 65, 198)
+TAG_ORANGE = (181, 71, 8)
+TAG_BLUE = (23, 92, 211)
+TAG_SLATE = (54, 63, 114)
 
 
-def font(name, size):
-    return ImageFont.truetype(os.path.join(FONTS, name), size)
+def _font_path(weight: str) -> str | None:
+    """Return the first usable font file for the requested weight."""
+    candidates = [
+        FONT_DIR / f"PlusJakartaSans-{weight}.ttf",
+        Path(f"/usr/share/fonts/truetype/dejavu/DejaVuSans-{weight}.ttf"),
+        Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+    ]
+    for path in candidates:
+        if path.is_file():
+            return str(path)
+    return None
 
 
-F_MAST = font("PlusJakartaSans-Bold.ttf", 58)
-F_DATE = font("PlusJakartaSans-SemiBold.ttf", 30)
-F_TAG = font("PlusJakartaSans-Bold.ttf", 21)
-F_HEAD = font("PlusJakartaSans-Bold.ttf", 27)
-F_BODY = font("PlusJakartaSans-Regular.ttf", 19)
-F_FOOT = font("PlusJakartaSans-Regular.ttf", 17)
-
-STORIES = [
-    ("GULF", "Iran strikes US bases in\nKuwait and Bahrain",
-     "Drones hit Patriot systems at Ali Al Salem; Bahrain repels a "
-     "fourth attack in six days.",
-     "Reuters / BBC"),
-    ("APEC", "Trump, Xi and Putin hold\nfirst three-way summit",
-     "Xi opens APEC with a $20m pledge; the trio meet for an hour on "
-     "nuclear arms and Iran.",
-     "Reuters / BBC"),
-    ("ICJ", "World court rules on\nRohingya genocide",
-     "The Hague delivers its verdict in Gambia v. Myanmar; a first-ever "
-     "state finding is possible.",
-     "Al Jazeera / Reuters"),
-    ("BANGLADESH", "Yunus home torched as\nlockdown grips Bangladesh",
-     "Arson in Chattogram and blasts in Dhaka as the Awami League strike "
-     "shuts down the country.",
-     "Reuters / TBS"),
-    ("TECH", "Anthropic's $81.3bn IPO\ndebuts on Nasdaq",
-     "The Claude maker prices at $83 a share in the biggest listing ever, "
-     "at about $1.5 trillion.",
-     "Reuters / CNBC"),
-    ("CRIMEA", "Crimean Bridge hit for\nthird time this week",
-     "Traffic halted again overnight, days after a road span collapsed "
-     "into the strait.",
-     "The Independent / BBC"),
-]
+def _load(size: int, weight: str) -> ImageFont.FreeTypeFont:
+    path = _font_path(weight)
+    if path is None:
+        return ImageFont.load_default(size=size)
+    return ImageFont.truetype(path, size)
 
 
-def wrap(draw, text, fnt, max_w):
-    words = text.split()
-    lines, cur = [], ""
-    for w in words:
-        trial = (cur + " " + w).strip()
-        if draw.textlength(trial, font=fnt) <= max_w:
-            cur = trial
+class Typefaces:
+    """All the fonts the poster needs, loaded once."""
+
+    def __init__(self) -> None:
+        self.masthead = _load(60, "Bold")
+        self.dateline = _load(27, "Bold")
+        self.tag = _load(22, "Bold")
+        self.headline = _load(29, "Bold")
+        self.body = _load(19, "Regular")
+        self.credit = _load(16, "Medium")
+        self.footer = _load(17, "Regular")
+
+
+def wrap(draw: ImageDraw.ImageDraw, text: str, font, width: int) -> list[str]:
+    """Greedy word wrap: split text into lines no wider than width."""
+    lines: list[str] = []
+    current = ""
+    for word in text.split():
+        trial = f"{current} {word}".strip()
+        if draw.textlength(trial, font=font) <= width:
+            current = trial
         else:
-            if cur:
-                lines.append(cur)
-            cur = w
-    if cur:
-        lines.append(cur)
+            if current:
+                lines.append(current)
+            current = word
+    if current:
+        lines.append(current)
     return lines
 
 
-def build():
-    img = Image.new("RGB", (W, H), PAPER)
-    d = ImageDraw.Draw(img)
+def fit_hero(hero: Image.Image, width: int, height: int) -> Image.Image:
+    """Centre-crop the hero to the band's aspect ratio, then resize."""
+    target = width / height
+    w, h = hero.size
+    if w / h > target:
+        new_w = int(h * target)
+        left = (w - new_w) // 2
+        hero = hero.crop((left, 0, left + new_w, h))
+    else:
+        new_h = int(w / target)
+        top = (h - new_h) // 2
+        hero = hero.crop((0, top, w, top + new_h))
+    return hero.resize((width, height), Image.LANCZOS)
 
-    # --- masthead ---
-    d.rectangle([0, 0, W, 118], fill=NAVY)
-    d.rectangle([0, 118, W, 122], fill=GOLD)
-    d.text((48, 22), "THE WORLD IN ONE DAY", font=F_MAST, fill=WHITE)
-    d.text((48, 84), "THURSDAY  \u00b7  19 NOVEMBER 2026", font=F_DATE, fill=GOLD)
 
-    # --- hero illustration ---
-    hero = Image.open(HERO).convert("RGB")
-    # cover-crop to 1024x300
-    tw, th = 1024, 300
-    scale = max(tw / hero.width, th / hero.height)
-    hero = hero.resize((int(hero.width * scale) + 1, int(hero.height * scale) + 1),
-                       Image.LANCZOS)
-    x0 = (hero.width - tw) // 2
-    y0 = (hero.height - th) // 2
-    hero = hero.crop((x0, y0, x0 + tw, y0 + th))
-    img.paste(hero, (0, 122))
-    d.rectangle([0, 422, W, 426], fill=GOLD)
+def paint_masthead(draw: ImageDraw.ImageDraw, fonts: Typefaces) -> None:
+    """Navy bar with the paper name in white and the date in gold."""
+    draw.rectangle([0, 0, CANVAS, 112], fill=NAVY)
+    draw.text((MARGIN, 16), "THE WORLD IN ONE DAY", font=fonts.masthead, fill=(255, 255, 255))
+    draw.text((MARGIN, 72), "THURSDAY \u00b7 19 NOVEMBER 2026", font=fonts.dateline, fill=GOLD)
+    draw.rectangle([0, 112, CANVAS, 116], fill=GOLD)
 
-    # --- story grid: 2 cols x 3 rows ---
-    gx, gy = 48, 448
-    cw, ch = 448, 168
-    gapx, gapy = 32, 10
-    for i, (tag, head, body, src) in enumerate(STORIES):
-        col, row = i % 2, i // 2
-        x = gx + col * (cw + gapx)
-        y = gy + row * (ch + gapy)
-        color = TAG_COLORS[tag]
-        d.text((x, y), tag, font=F_TAG, fill=color)
-        d.line([(x, y + 30), (x + 64, y + 30)], fill=color, width=3)
-        yy = y + 42
-        for line in head.split("\n"):
-            d.text((x, yy), line, font=F_HEAD, fill=INK)
-            yy += 32
-        for line in wrap(d, body, F_BODY, cw):
-            d.text((x, yy), line, font=F_BODY, fill=MUTED)
-            yy += 24
-        d.text((x, yy + 2), "Source: " + src, font=F_FOOT, fill=(140, 130, 110))
-        if col == 0:
-            d.line([(x + cw + 16, y + 4), (x + cw + 16, y + ch - 8)], fill=RULE, width=1)
 
-    # --- footer ---
-    d.line([(48, 994), (976, 994)], fill=RULE, width=1)
-    d.text((48, 1001), "Six stories that defined the day  \u00b7  Headlines as reported 19 Nov 2026",
-           font=F_FOOT, fill=MUTED)
+def paint_story(
+    draw: ImageDraw.ImageDraw,
+    fonts: Typefaces,
+    x: int,
+    y: int,
+    story: dict,
+) -> None:
+    """One story cell: coloured tag, two-line headline, body, source."""
+    colour = story["colour"]
+    draw.text((x, y), story["tag"], font=fonts.tag, fill=colour)
+    tag_width = draw.textlength(story["tag"], font=fonts.tag)
+    draw.line([(x, y + 30), (x + tag_width, y + 30)], fill=colour, width=3)
 
-    out = os.path.join(HERE, "entry.png")
-    img.save(out, "PNG", optimize=True)
-    return out
+    cursor = y + 38
+    for line in wrap(draw, story["headline"], fonts.headline, COLUMN)[:2]:
+        draw.text((x, cursor), line, font=fonts.headline, fill=INK)
+        cursor += 32
+
+    cursor += 4
+    for line in wrap(draw, story["body"], fonts.body, COLUMN)[:2]:
+        draw.text((x, cursor), line, font=fonts.body, fill=BODY_GREY)
+        cursor += 22
+
+    cursor += 6
+    draw.text((x, cursor), f"Source: {story['source']}", font=fonts.credit, fill=FAINT_GREY)
+
+
+STORIES = [
+    {
+        "tag": "GULF",
+        "colour": TAG_RED,
+        "headline": "Iran strikes US bases in Kuwait and Bahrain",
+        "body": "Drones hit Patriot systems at Ali Al Salem; Bahrain repels a fourth attack in six days.",
+        "source": "Reuters / BBC",
+    },
+    {
+        "tag": "APEC",
+        "colour": TAG_TEAL,
+        "headline": "Trump, Xi and Putin hold first three-way summit",
+        "body": "Xi opens APEC with a $20m pledge; the trio meet for an hour on nuclear arms and Iran.",
+        "source": "Reuters / BBC",
+    },
+    {
+        "tag": "ICJ",
+        "colour": TAG_PURPLE,
+        "headline": "World court finds Myanmar forces killed 10,000 Rohingya",
+        "body": "ICJ delivers its Rohingya genocide judgment in The Hague, finding mass killings and systematic hate speech in 2017.",
+        "source": "BBC / Reuters",
+    },
+    {
+        "tag": "BANGLADESH",
+        "colour": TAG_ORANGE,
+        "headline": "Yunus home torched as lockdown grips Bangladesh",
+        "body": "Arson in Chattogram and blasts in Dhaka as the Awami League strike shuts down the country.",
+        "source": "Reuters / TBS",
+    },
+    {
+        "tag": "TECH",
+        "colour": TAG_BLUE,
+        "headline": "Anthropic's $81.3bn IPO debuts on Nasdaq",
+        "body": "The Claude maker prices at $83 a share in the biggest listing ever, at about $1.5 trillion.",
+        "source": "Reuters / CNBC",
+    },
+    {
+        "tag": "CRIMEA",
+        "colour": TAG_SLATE,
+        "headline": "Crimean Bridge hit for third time this week",
+        "body": "Traffic halted again overnight, days after a road span collapsed into the strait.",
+        "source": "The Independent / BBC",
+    },
+]
+
+
+def build_poster() -> Image.Image:
+    """Compose the full poster and return it as a Pillow image."""
+    fonts = Typefaces()
+    sheet = Image.new("RGB", (CANVAS, CANVAS), PAPER)
+    draw = ImageDraw.Draw(sheet)
+
+    paint_masthead(draw, fonts)
+
+    hero_path = Path(__file__).resolve().parent / "assets" / HERO_FILE
+    hero = fit_hero(Image.open(hero_path).convert("RGB"), CANVAS, 292)
+    sheet.paste(hero, (0, 116))
+    draw.rectangle([0, 408, CANVAS, 412], fill=GOLD)
+
+    rows = [436, 616, 796]
+    for index, story in enumerate(STORIES):
+        column = index % 2
+        row = index // 2
+        x = MARGIN + column * (COLUMN + GUTTER)
+        paint_story(draw, fonts, x, rows[row], story)
+
+    divider_x = MARGIN + COLUMN + GUTTER // 2
+    draw.line([(divider_x, 440), (divider_x, 968)], fill=DIVIDER, width=1)
+
+    draw.line([(MARGIN, 988), (CANVAS - MARGIN, 988)], fill=DIVIDER, width=1)
+    footer = "Six stories that defined the day \u00b7 Headlines as reported 19 Nov 2026"
+    footer_width = draw.textlength(footer, font=fonts.footer)
+    draw.text(((CANVAS - footer_width) / 2, 998), footer, font=fonts.footer, fill=FAINT_GREY)
+
+    return sheet
+
+
+def main(argv: list[str]) -> int:
+    out = Path(argv[1]) if len(argv) > 1 else Path(__file__).resolve().parent / "entry.png"
+    poster = build_poster()
+    poster.save(out, format="PNG", optimize=True)
+    print(f"wrote {out} ({out.stat().st_size} bytes)")
+    return 0
 
 
 if __name__ == "__main__":
-    path = build()
-    im = Image.open(path)
-    print(path, im.size, os.path.getsize(path), "bytes")
+    raise SystemExit(main(sys.argv))
